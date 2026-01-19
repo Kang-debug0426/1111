@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>河南省地图 - 四大水库分布（高德地图）</title>
+    <!-- 使用更稳定的高德地图API版本 -->
+    <script src="https://webapi.amap.com/maps?v=1.4.15&key=4780896401cf115bfa7e9619d041f977&plugin=AMap.Scale,AMap.ToolBar"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        header {
+            background: linear-gradient(90deg, #2c3e50 0%, #4a6491 100%);
+            color: white;
+            padding: 20px 30px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+        }
+        
+        h1 {
+            font-size: 2.4rem;
+            margin-bottom: 8px;
+            text-align: center;
+            letter-spacing: 1px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            font-size: 1.1rem;
+            opacity: 0.9;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.5;
+        }
+        
+        .container {
+            flex: 1;
+            display: flex;
+            padding: 20px;
+            gap: 20px;
+            overflow: hidden;
+        }
+        
+        #map-container {
+            flex: 3;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+            overflow: hidden;
+            position: relative;
+            height: 700px;
+        }
+        
+        #info-panel {
+            flex: 1;
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+            overflow-y: auto;
+            max-width: 350px;
+        }
+        
+        #info-panel h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #3498db;
+        }
+        
+        .reservoir-info {
+            margin-bottom: 25px;
+            padding: 18px;
+            border-radius: 10px;
+            background: #f8fafc;
+            border-left: 4px solid #e74c3c;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .reservoir-info:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(231, 76, 60, 0.2);
+            background: #ffeaea;
+        }
+        
+        .reservoir-info.active {
+            background: #ffeaea;
+            box-shadow: 0 5px 15px rgba(231, 76, 60, 0.3);
+        }
+        
+        .reservoir-info h3 {
+            color: #2c3e50;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .reservoir-info h3:before {
+            content: "●";
+            color: #e74c3c;
+            margin-right: 8px;
+            font-size: 1.2em;
+        }
+        
+        .reservoir-info p {
+            color: #555;
+            line-height: 1.6;
+            font-size: 0.95rem;
+        }
+        
+        .controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1000;
+        }
+        
+        .controls button {
+            padding: 10px 15px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            box-shadow: 0 3px 8px rgba(52, 152, 219, 0.3);
+            transition: all 0.3s ease;
+            font-size: 14px;
+            min-width: 100px;
+        }
+        
+        .controls button:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 12px rgba(52, 152, 219, 0.4);
+        }
+        
+        .controls button.secondary {
+            background: #7f8c8d;
+        }
+        
+        .controls button.secondary:hover {
+            background: #6c7b7d;
+        }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.2rem;
+            color: #2c3e50;
+            z-index: 100;
+            background: white;
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .loading.error {
+            color: #e74c3c;
+            border-left: 4px solid #e74c3c;
+        }
+        
+        .reservoir-marker {
+            width: 20px;
+            height: 20px;
+            background-color: #e74c3c;
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .reservoir-marker.pulse {
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        footer {
+            text-align: center;
+            padding: 15px;
+            font-size: 0.9rem;
+            color: #7f8c8d;
+            background: rgba(255, 255, 255, 0.8);
+        }
+        
+        .status-bar {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1000;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        @media (max-width: 1024px) {
+            .container {
+                flex-direction: column;
+            }
+            
+            #info-panel {
+                max-width: 100%;
+            }
+            
+            #map-container {
+                height: 500px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>河南省地图 - 四大水库分布</h1>
+        <p class="subtitle">基于高德地图API的河南省地图，精准显示四大水库位置</p>
+    </header>
+    
+    <div class="container">
+        <div id="map-container">
+            <div class="loading" id="loading">正在加载地图...</div>
+            <div class="status-bar" id="status-bar" style="display: none;">
+                经度: --, 纬度: --, 缩放: --
+            </div>
+        </div>
+        
+        <div id="info-panel">
+            <h2>河南省四大水库</h2>
+            
+            <div class="reservoir-info" id="info-xiaolangdi">
+                <h3>小浪底水库</h3>
+                <p><strong>位置：</strong>洛阳市孟津县与济源市之间</p>
+                <p><strong>功能：</strong>黄河干流上重要的水利工程，以防洪、减淤为主，兼顾供水、灌溉和发电</p>
+                <p><strong>库容：</strong>126.5亿立方米</p>
+            </div>
+            
+            <div class="reservoir-info" id="info-baiguishan">
+                <h3>白龟山水库</h3>
+                <p><strong>位置：</strong>平顶山市西南郊</p>
+                <p><strong>功能：</strong>淮河流域沙颍河水系的重要水库，具有防洪、供水、灌溉等综合效益</p>
+                <p><strong>库容：</strong>6.49亿立方米</p>
+            </div>
+            
+            <div class="reservoir-info" id="info-shimantan">
+                <h3>石漫滩水库</h3>
+                <p><strong>位置：</strong>舞钢市境内</p>
+                <p><strong>功能：</strong>淮河流域洪汝河水系的重要水库，以防洪、灌溉为主，兼顾发电和供水</p>
+                <p><strong>库容：</strong>2.44亿立方米</p>
+            </div>
+            
+            <div class="reservoir-info" id="info-suyahu">
+                <h3>宿鸭湖水库</h3>
+                <p><strong>位置：</strong>驻马店市汝南县境内</p>
+                <p><strong>功能：</strong>亚洲面积最大的平原人工水库，具有防洪、灌溉、养殖等综合功能</p>
+                <p><strong>库容：</strong>16.56亿立方米</p>
+            </div>
+            
+            <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid #eee;">
+                <h3 style="font-size: 1rem; color: #2c3e50; margin-bottom: 10px;">使用说明</h3>
+                <ul style="font-size: 0.85rem; color: #666; line-height: 1.6; padding-left: 20px;">
+                    <li>点击水库标记或右侧信息面板可查看详情</li>
+                    <li>点击"重置视图"回到默认位置</li>
+                    <li>点击"高亮水库"同时显示所有水库位置</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <button id="reset-view">重置视图</button>
+        <button id="highlight-all" class="secondary">高亮水库</button>
+        <button id="toggle-satellite" class="secondary">卫星地图</button>
+    </div>
+    
+    <footer>
+        <p>数据来源：高德地图API | 河南省四大水库位置示意</p>
+    </footer>
+
+    <script>
+        // 河南省四大水库数据
+        const reservoirs = [
+            {
+                id: "xiaolangdi",
+                name: "小浪底水库",
+                coordinates: [112.28, 34.92],
+                description: "位于洛阳市孟津县与济源市之间，是黄河干流上重要的水利工程，以防洪、减淤为主，兼顾供水、灌溉和发电。",
+                capacity: "126.5亿立方米"
+            },
+            {
+                id: "baiguishan",
+                name: "白龟山水库",
+                coordinates: [113.18, 33.73],
+                description: "位于平顶山市西南郊，是淮河流域沙颍河水系的重要水库，具有防洪、供水、灌溉等综合效益。",
+                capacity: "6.49亿立方米"
+            },
+            {
+                id: "shimantan",
+                name: "石漫滩水库",
+                coordinates: [113.58, 33.28],
+                description: "位于舞钢市境内，是淮河流域洪汝河水系的重要水库，以防洪、灌溉为主，兼顾发电和供水。",
+                capacity: "2.44亿立方米"
+            },
+            {
+                id: "suyahu",
+                name: "宿鸭湖水库",
+                coordinates: [114.35, 33.00],
+                description: "位于驻马店市汝南县境内，是亚洲面积最大的平原人工水库，具有防洪、灌溉、养殖等综合功能。",
+                capacity: "16.56亿立方米"
+            }
+        ];
+
+        // 全局变量
+        let map = null;
+        let markers = [];
+        let isSatellite = false;
+        let currentPolygon = null;
+
+        // 显示状态信息
+        function updateStatusBar(lng, lat, zoom) {
+            const statusBar = document.getElementById('status-bar');
+            statusBar.innerHTML = `经度: ${lng.toFixed(4)}, 纬度: ${lat.toFixed(4)}, 缩放: ${zoom}`;
+            statusBar.style.display = 'block';
+        }
+
+        // 初始化地图
+        function initMap() {
+            const loadingDiv = document.getElementById('loading');
+            
+            try {
+                // 检查高德地图API是否加载
+                if (typeof AMap === 'undefined') {
+                    loadingDiv.innerHTML = '高德地图API加载失败<br>请检查网络连接和API Key';
+                    loadingDiv.className = 'loading error';
+                    return;
+                }
+                
+                console.log('高德地图API版本:', AMap.v);
+                
+                // 检查API Key是否有效
+                const script = document.querySelector('script[src*="amap.com"]');
+                if (script && script.src.includes('您的高德API_Key')) {
+                    loadingDiv.innerHTML = '请先替换您的API Key<br>访问 https://lbs.amap.com 获取';
+                    loadingDiv.className = 'loading error';
+                    return;
+                }
+                
+                // 初始化地图
+                map = new AMap.Map('map-container', {
+                    zoom: 7,
+                    center: [113.5, 34.0],
+                    viewMode: '2D',
+                    resizeEnable: true
+                });
+                
+                console.log('地图初始化成功');
+                
+                // 隐藏加载提示
+                loadingDiv.style.display = 'none';
+                
+                // 添加地图控件（使用正确的方法）
+                // 比例尺控件
+                map.plugin(["AMap.Scale"], function() {
+                    map.addControl(new AMap.Scale({
+                        position: 'LB'
+                    }));
+                });
+                
+                // 工具条控件
+                map.plugin(["AMap.ToolBar"], function() {
+                    map.addControl(new AMap.ToolBar({
+                        position: 'RT'
+                    }));
+                });
+                
+                // 添加地图事件监听
+                map.on('moveend', function() {
+                    const center = map.getCenter();
+                    const zoom = map.getZoom();
+                    updateStatusBar(center.getLng(), center.getLat(), zoom);
+                });
+                
+                // 初始状态
+                const center = map.getCenter();
+                updateStatusBar(center.getLng(), center.getLat(), map.getZoom());
+                
+                // 绘制河南省简化边界
+                drawHenanBoundary();
+                
+                // 添加水库标记
+                addReservoirMarkers();
+                
+                // 添加控制按钮事件
+                addControls();
+                
+                // 添加信息面板交互
+                addInfoPanelInteractions();
+                
+            } catch (error) {
+                console.error('地图初始化错误:', error);
+                loadingDiv.innerHTML = '地图加载失败: ' + error.message + 
+                    '<br><br>常见问题：<br>1. API Key无效或过期<br>2. 网络连接问题<br>3. 浏览器控制台查看详细错误';
+                loadingDiv.className = 'loading error';
+            }
+        }
+        
+        // 绘制河南省简化边界
+        function drawHenanBoundary() {
+            // 河南省的简化边界坐标（近似）
+            const henanPath = [
+                [110.36, 31.38],
+                [110.36, 36.39],
+                [116.65, 36.39],
+                [116.65, 31.38],
+                [110.36, 31.38]
+            ];
+            
+            // 如果有之前的边界，先清除
+            if (currentPolygon) {
+                map.remove(currentPolygon);
+            }
+            
+            // 创建多边形
+            currentPolygon = new AMap.Polygon({
+                path: henanPath,
+                strokeColor: '#3498db',
+                strokeOpacity: 0.8,
+                strokeWeight: 2,
+                strokeDasharray: [5, 5],
+                fillColor: 'rgba(52, 152, 219, 0.1)',
+                fillOpacity: 0.2,
+                cursor: 'pointer',
+                zIndex: 50
+            });
+            
+            // 添加点击事件
+            currentPolygon.on('click', function(e) {
+                resetView();
+            });
+            
+            map.add(currentPolygon);
+        }
+        
+        // 添加水库标记
+        function addReservoirMarkers() {
+            reservoirs.forEach(reservoir => {
+                // 创建自定义标记内容
+                const markerContent = document.createElement('div');
+                markerContent.className = 'reservoir-marker';
+                markerContent.title = reservoir.name;
+                markerContent.innerHTML = '<div style="width:100%;height:100%;border-radius:50%;background-color:#e74c3c;"></div>';
+                
+                // 创建标记
+                const marker = new AMap.Marker({
+                    position: new AMap.LngLat(reservoir.coordinates[0], reservoir.coordinates[1]),
+                    content: markerContent,
+                    offset: new AMap.Pixel(-10, -10),
+                    title: reservoir.name,
+                    zIndex: 100,
+                    extData: reservoir // 存储额外数据
+                });
+                
+                // 添加点击事件
+                marker.on('click', function(e) {
+                    // 放大到水库位置
+                    map.setZoomAndCenter(12, reservoir.coordinates);
+                    
+                    // 显示水库信息
+                    showReservoirInfo(reservoir, e.target.getPosition());
+                    
+                    // 高亮当前水库
+                    highlightReservoir(reservoir.id, true);
+                });
+                
+                // 添加鼠标悬停事件
+                marker.on('mouseover', function() {
+                    marker.getContent().classList.add('pulse');
+                    highlightReservoir(reservoir.id, true);
+                });
+                
+                marker.on('mouseout', function() {
+                    marker.getContent().classList.remove('pulse');
+                    // 不清除高亮，保持状态
+                });
+                
+                map.add(marker);
+                markers.push({
+                    marker: marker,
+                    reservoir: reservoir
+                });
+            });
+        }
+        
+        // 显示水库信息（使用简单的弹窗）
+        function showReservoirInfo(reservoir, position) {
+            const infoContent = `
+                <div style="padding: 15px; max-width: 300px; font-family: 'Microsoft YaHei', sans-serif;">
+                    <div style="color: #e74c3c; font-size: 16px; font-weight: bold; margin-bottom: 10px; border-left: 4px solid #e74c3c; padding-left: 10px;">
+                        ${reservoir.name}
+                    </div>
+                    <div style="color: #666; line-height: 1.6;">
+                        <div style="margin-bottom: 8px;">
+                            <span style="color: #333; font-weight: bold;">库容：</span>
+                            ${reservoir.capacity}
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <span style="color: #333; font-weight: bold;">位置：</span>
+                            ${getReservoirLocation(reservoir.name)}
+                        </div>
+                        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee; font-size: 12px; color: #888;">
+                            点击地图其他位置关闭
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // 创建信息窗口
+            const infoWindow = new AMap.InfoWindow({
+                content: infoContent,
+                offset: new AMap.Pixel(0, -30)
+            });
+            
+            infoWindow.open(map, position);
+            
+            // 存储当前信息窗口，以便后续关闭
+            if (window.currentInfoWindow) {
+                window.currentInfoWindow.close();
+            }
+            window.currentInfoWindow = infoWindow;
+        }
+        
+        // 获取水库位置描述
+        function getReservoirLocation(name) {
+            const locations = {
+                '小浪底水库': '洛阳市孟津县与济源市之间',
+                '白龟山水库': '平顶山市西南郊',
+                '石漫滩水库': '舞钢市境内',
+                '宿鸭湖水库': '驻马店市汝南县境内'
+            };
+            return locations[name] || '河南省境内';
+        }
+        
+        // 高亮水库
+        function highlightReservoir(reservoirId, highlight) {
+            // 高亮地图标记
+            markers.forEach(item => {
+                if (item.reservoir.id === reservoirId) {
+                    const markerContent = item.marker.getContent();
+                    if (markerContent) {
+                        if (highlight) {
+                            markerContent.style.transform = 'scale(1.5)';
+                            markerContent.style.boxShadow = '0 0 20px rgba(255, 107, 107, 0.8)';
+                            markerContent.firstChild.style.backgroundColor = '#ff6b6b';
+                        } else {
+                            markerContent.style.transform = 'scale(1)';
+                            markerContent.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.3)';
+                            markerContent.firstChild.style.backgroundColor = '#e74c3c';
+                        }
+                    }
+                }
+            });
+            
+            // 高亮信息面板
+            const infoElement = document.getElementById('info-' + reservoirId);
+            if (infoElement) {
+                if (highlight) {
+                    infoElement.classList.add('active');
+                } else {
+                    infoElement.classList.remove('active');
+                }
+            }
+        }
+        
+        // 高亮所有水库
+        function highlightAllReservoirs() {
+            markers.forEach(item => {
+                const markerContent = item.marker.getContent();
+                if (markerContent) {
+                    markerContent.style.transform = 'scale(1.5)';
+                    markerContent.style.boxShadow = '0 0 20px rgba(255, 107, 107, 0.8)';
+                    markerContent.firstChild.style.backgroundColor = '#ff6b6b';
+                    markerContent.classList.add('pulse');
+                }
+                
+                const infoElement = document.getElementById('info-' + item.reservoir.id);
+                if (infoElement) {
+                    infoElement.classList.add('active');
+                }
+            });
+            
+            // 3秒后恢复
+            setTimeout(() => {
+                markers.forEach(item => {
+                    const markerContent = item.marker.getContent();
+                    if (markerContent) {
+                        markerContent.style.transform = 'scale(1)';
+                        markerContent.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.3)';
+                        markerContent.firstChild.style.backgroundColor = '#e74c3c';
+                        markerContent.classList.remove('pulse');
+                    }
+                    
+                    const infoElement = document.getElementById('info-' + item.reservoir.id);
+                    if (infoElement) {
+                        infoElement.classList.remove('active');
+                    }
+                });
+            }, 3000);
+        }
+        
+        // 切换卫星地图
+        function toggleSatellite() {
+            isSatellite = !isSatellite;
+            
+            if (isSatellite) {
+                // 切换到卫星地图
+                map.setMapStyle('amap://styles/satellite');
+                document.getElementById('toggle-satellite').textContent = '普通地图';
+                
+                // 调整边界颜色以适应卫星地图
+                if (currentPolygon) {
+                    currentPolygon.setOptions({
+                        strokeColor: '#00ff00',
+                        fillColor: 'rgba(0, 255, 0, 0.1)'
+                    });
+                }
+            } else {
+                // 切换回普通地图
+                map.setMapStyle('amap://styles/normal');
+                document.getElementById('toggle-satellite').textContent = '卫星地图';
+                
+                // 恢复边界颜色
+                if (currentPolygon) {
+                    currentPolygon.setOptions({
+                        strokeColor: '#3498db',
+                        fillColor: 'rgba(52, 152, 219, 0.1)'
+                    });
+                }
+            }
+        }
+        
+        // 重置视图
+        function resetView() {
+            map.setZoomAndCenter(7, [113.5, 34.0]);
+            
+            // 关闭信息窗口
+            if (window.currentInfoWindow) {
+                window.currentInfoWindow.close();
+                window.currentInfoWindow = null;
+            }
+            
+            // 取消所有高亮
+            markers.forEach(item => {
+                const markerContent = item.marker.getContent();
+                if (markerContent) {
+                    markerContent.style.transform = 'scale(1)';
+                    markerContent.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.3)';
+                    markerContent.firstChild.style.backgroundColor = '#e74c3c';
+                    markerContent.classList.remove('pulse');
+                }
+                
+                const infoElement = document.getElementById('info-' + item.reservoir.id);
+                if (infoElement) {
+                    infoElement.classList.remove('active');
+                }
+            });
+        }
+        
+        // 添加控制按钮
+        function addControls() {
+            document.getElementById('reset-view').addEventListener('click', resetView);
+            document.getElementById('highlight-all').addEventListener('click', highlightAllReservoirs);
+            document.getElementById('toggle-satellite').addEventListener('click', toggleSatellite);
+            
+            // 点击地图其他地方关闭信息窗口
+            map.on('click', function() {
+                if (window.currentInfoWindow) {
+                    window.currentInfoWindow.close();
+                    window.currentInfoWindow = null;
+                }
+            });
+        }
+        
+        // 添加信息面板交互
+        function addInfoPanelInteractions() {
+            reservoirs.forEach(reservoir => {
+                const infoElement = document.getElementById('info-' + reservoir.id);
+                if (infoElement) {
+                    infoElement.addEventListener('click', () => {
+                        // 放大到水库位置
+                        map.setZoomAndCenter(12, reservoir.coordinates);
+                        
+                        // 显示水库信息
+                        showReservoirInfo(reservoir, reservoir.coordinates);
+                        
+                        // 高亮当前水库
+                        highlightReservoir(reservoir.id, true);
+                    });
+                    
+                    infoElement.addEventListener('mouseenter', () => {
+                        highlightReservoir(reservoir.id, true);
+                    });
+                    
+                    infoElement.addEventListener('mouseleave', () => {
+                        // 不清除高亮，保持状态
+                    });
+                }
+            });
+        }
+
+        // 页面加载完成后初始化地图
+        window.onload = function() {
+            console.log('页面加载完成，开始初始化地图...');
+            // 延迟初始化，确保一切就绪
+            setTimeout(initMap, 500);
+        };
+        
+        // 提供检查API Key的函数
+        window.checkAPIKey = function() {
+            const script = document.querySelector('script[src*="amap.com"]');
+            if (script) {
+                const match = script.src.match(/key=([^&]+)/);
+                if (match) {
+                    const key = match[1];
+                    if (key === '您的高德API_Key') {
+                        alert('请先替换API Key！\n访问 https://lbs.amap.com 获取您的Key');
+                    } else {
+                        alert('API Key检测通过\n前10位：' + key.substring(0, 10) + '...');
+                    }
+                }
+            }
+        };
+    </script>
+</body>
+</html>
